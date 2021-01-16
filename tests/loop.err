@@ -1,0 +1,1 @@
+ERROR: loop detected in path: ./tests/loop -> ./tests/loop

@@ -1,0 +1,3 @@
+./tests/loop3 -> loop1
+  ./tests/loop1 -> loop2
+    ./tests/loop2 -> loop3

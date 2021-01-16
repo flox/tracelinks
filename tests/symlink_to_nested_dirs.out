@@ -1,0 +1,2 @@
+./tests/symlink_to_nested_dirs -> ./././dir/../dir/../dir/././.
+  ./tests/./././dir/../dir/../dir/././.: directory

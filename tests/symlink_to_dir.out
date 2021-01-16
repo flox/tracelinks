@@ -1,0 +1,2 @@
+./tests/symlink_to_dir -> dir
+  ./tests/dir: directory

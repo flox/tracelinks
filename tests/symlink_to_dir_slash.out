@@ -1,0 +1,2 @@
+./tests/symlink_to_dir_slash -> dir/
+  ./tests/dir/: directory
