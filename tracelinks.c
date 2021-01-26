@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <err.h>
+#include <stdarg.h>
 #include <string.h>
 #include <getopt.h>
 #include <sys/types.h>
@@ -13,11 +15,11 @@ static int absolute_flag = 0;
 static int keep_going_flag = 0;
 
 #define MAXITERATIONS 1024	// arbitrary limit
-static struct { char *root; char *path; } seenTuples[MAXITERATIONS];
+static struct { const char *root; const char *path; } seenTuples[MAXITERATIONS];
 static int seenCount;
 
 static void
-usage()
+usage(const int rc)
 {
 	printf("Usage: tracelinks [OPTION] PATH [PATH]...\n");
 	printf("Report on symbolic links encountered in path traversals.\n\n");
@@ -26,23 +28,34 @@ usage()
 	printf("  -h, --help        print this help message\n");
 	printf("  -d, --debug       print extra debugging to STDERR\n");
 	printf("  -v, --version     print version string\n");
+	exit(rc);
+}
+
+static void
+error(const char *format, ...)
+{
+	va_list argp;
+	va_start(argp, format);
+	vwarnx(format, argp);
+	va_end(argp);
+	usage(EXIT_FAILURE);
 }
 
 /*
  * Loop check: verify that we haven't seen this (root,path) tuple before.
  */
-int
-loopcheck (char *root, char *path)
+static int
+loopcheck (const char *root, const char *path)
 {
 	if (debug_flag)
 		fprintf(stderr, "loopcheck('%s', '%s')\n", root, path);
 
-	if (seenCount < 0) return(0);
+	if (seenCount < 0) return(EXIT_SUCCESS);
 	if (seenCount >= MAXITERATIONS) {
-		fprintf(stderr, "WARNING: encountered maximum path traversals (%d),"
-			" disabling loop detection\n", MAXITERATIONS);
+		warnx("encountered maximum path traversals (%d),"
+			" disabling loop detection", MAXITERATIONS);
 		seenCount = -1;
-		return(0);
+		return(EXIT_SUCCESS);
 	}
 
 	for (int i=0; i<seenCount; i++)
@@ -56,17 +69,18 @@ loopcheck (char *root, char *path)
 		}
 	seenTuples[seenCount].root = root;
 	seenTuples[seenCount++].path = path;
-	return(0);
+	return(EXIT_SUCCESS);
 }
 
 #define print_indent(x) printf("%*s", x*2, "")
 
-int
-tracelinks (int indent, char *root, char *path)
+static int
+tracelinks (int indent, const char *root, const char *path)
 {
 	struct stat sb;
-	char *buf, *pathbuf;
-	ssize_t nbytes;
+	char pathbuf[PATH_MAX];
+	char *pathend = pathbuf;
+	memset(pathbuf, 0, PATH_MAX);
 
 	if (debug_flag)
 		fprintf(stderr, "tracelinks('%s', '%s')\n", root, path);
@@ -75,18 +89,13 @@ tracelinks (int indent, char *root, char *path)
 	if (rc)
 		return(rc);
 
-	pathbuf = malloc(PATH_MAX);
-	if (pathbuf == NULL) {
-		perror("malloc()");
-		return(EXIT_FAILURE);
-	}
-	bzero(pathbuf, PATH_MAX);
 
 	if (strlen(root) == 0) {
 		if (*path == '/') {
 			/* absolute path */
 			return(tracelinks(indent, "/", (path+1)));
-		} else {
+		}
+		else {
 			/* relative path */
 			if (absolute_flag) {
 				/* Report paths as absolute */
@@ -96,7 +105,8 @@ tracelinks (int indent, char *root, char *path)
 				}
 				strcat(pathbuf, "/");
 				return(tracelinks(indent, pathbuf, path));
-			} else
+			}
+			else
 				/* Report paths relative to "." */
 				return(tracelinks(indent, "./", path));
 		}
@@ -106,8 +116,8 @@ tracelinks (int indent, char *root, char *path)
 	char *d = strchr(path, '/');
 	if (d != NULL)
 		*d = '\0';
-	strcat(pathbuf, root);
-	strcat(pathbuf, path);
+	pathend = stpcpy(pathend, root);
+	pathend = stpcpy(pathend, path);
 
 	if (debug_flag)
 		fprintf(stderr, "lstat('%s')\n", pathbuf);
@@ -116,36 +126,30 @@ tracelinks (int indent, char *root, char *path)
 		return(EXIT_FAILURE);
 	}
 
-	if ((sb.st_mode & S_IFMT) == S_IFLNK) {		// symlink
-		buf = malloc(PATH_MAX);
-		if (buf == NULL) {
-			perror("malloc()");
-			return(EXIT_FAILURE);
-		}
-		bzero(buf, PATH_MAX);
+	if (S_ISLNK(sb.st_mode)) {
+		char linkbuf[PATH_MAX];
+		char *linkbufend = linkbuf;
+		memset(linkbuf, 0, PATH_MAX);
 
-		nbytes = readlink(pathbuf, buf, PATH_MAX);
+		ssize_t nbytes = readlink(pathbuf, linkbuf, PATH_MAX);
 		if (nbytes == -1) {
 			perror(pathbuf);
 			return(EXIT_FAILURE);
 		}
 
 		print_indent(indent++);
-		printf("%s -> %.*s\n", pathbuf, (int) nbytes, buf);
+		printf("%s -> %.*s\n", pathbuf, (int) nbytes, linkbuf);
 
 		if (d) {
-			strcat(buf, "/");
-			strcat(buf, d+1);
+			*d = '/';
+			linkbufend = stpcpy(linkbufend, d);
 		}
-		if (*buf == '/') {
+		if (*linkbuf == '/')
 			/* Absolute link, reset root to "" and replace path */
-			return(tracelinks(indent, "", buf));
-		} else {
+			return(tracelinks(indent, "", linkbuf));
+		else
 			/* Relative link, replace path only */
-			return(tracelinks(indent, root, buf));
-		}
-
-		free(buf);
+			return(tracelinks(indent, root, linkbuf));
 	}
 	else {
 		/*
@@ -153,9 +157,9 @@ tracelinks (int indent, char *root, char *path)
 		 * directories remaining, otherwise just report it as
 		 * a directory.
 		 */
-		if (d && (sb.st_mode & S_IFMT) == S_IFDIR) {
-			strcat(pathbuf, "/");
-			return(tracelinks(indent, pathbuf,d+1));
+		if (d && S_ISDIR(sb.st_mode)) {
+			pathend = stpcpy(pathend, "/");
+			return(tracelinks(indent, pathbuf, d+1));
 		}
 		print_indent(indent++);
 		switch (sb.st_mode & S_IFMT) {
@@ -167,9 +171,12 @@ tracelinks (int indent, char *root, char *path)
 			case S_IFSOCK: printf("%s: socket\n", pathbuf); break;
 			default: printf("%s: unknown?\n", pathbuf);
 		}
+		if (d) {
+			warnx("extra trailing characters: %s", d+1);
+			return(EXIT_FAILURE);
+		}
 	}
-	free(pathbuf);
-	return(0);
+	return(EXIT_SUCCESS);
 }
 
 int
@@ -198,16 +205,6 @@ main (int argc, char **argv)
 			break;
 
 		switch (c) {
-			case 0:
-				/* If this option set a flag, do nothing else now. */
-				if (long_options[option_index].flag != 0)
-					break;
-				printf ("option %s", long_options[option_index].name);
-				if (optarg)
-					printf (" with arg %s", optarg);
-				printf ("\n");
-				break;
-
 			case 'a':
 				absolute_flag = 1;
 				break;
@@ -218,34 +215,34 @@ main (int argc, char **argv)
 
 			case 'v':
 				puts(VERSION);
-				exit(0);
+				exit(EXIT_SUCCESS);
 
 			case 'd':
 				debug_flag = 1;
 				break;
 
 			case 'h':
-				usage();
-				exit(0);
+				usage(EXIT_SUCCESS);
 
 			case '?':
 				/* getopt_long already printed an error message. */
-				break;
+				usage(EXIT_FAILURE);
 
 			default:
-				abort ();
+				error("?? getopt returned character code 0%o ??", c);
 		}
 	}
 
-	if (optind < argc) {
-		while (optind < argc) {
-			seenCount = 0;	/* reset with each new path traversal */
-			int rc = tracelinks(0, "", argv[optind++]);
-			if (rc > 0 && keep_going_flag == 0)
-				exit(rc);
-			if ((argc - optind) > 0) printf("\n");
-			maxrc = MAX(rc, maxrc);
-		}
+	if (optind == argc)
+		error("no paths provided\n");
+
+	while (optind < argc) {
+		seenCount = 0;	/* reset with each new path traversal */
+		int rc = tracelinks(0, "", argv[optind++]);
+		if (rc > 0 && keep_going_flag == 0)
+			exit(rc);
+		if ((argc - optind) > 0) printf("\n");
+		maxrc = MAX(rc, maxrc);
 	}
 
 	exit(maxrc);

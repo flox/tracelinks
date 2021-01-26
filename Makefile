@@ -34,11 +34,11 @@ $(MAN1DIR)/%: %
 	cp $< $@
 	chmod 444 $@
 
+.PHONY: all install clean
 all: $(BIN) $(MAN1)
 
 install: $(INSTBIN) $(INSTMAN1)
 
-.PHONY: clean
 clean:
 	-rm -f $(BIN) $(MAN1)
 

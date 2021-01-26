@@ -1,0 +1,2 @@
+./tests/trailing_slash_path -> ../tests/file/trailing/path
+  ./tests/../tests/file: regular file
