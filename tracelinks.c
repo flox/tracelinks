@@ -14,13 +14,13 @@ static int debug_flag = 0;
 static int absolute_flag = 0;
 static int keep_going_flag = 0;
 
-#define MAXITERATIONS 1024	// arbitrary limit
+/* Maximum expected number of recursive calls (not symlinks). */
+#define MAXITERATIONS 1024
 static struct { const char *root; const char *path; } seenTuples[MAXITERATIONS];
 static int seenCount;
 
 static void
-usage(const int rc)
-{
+usage(const int rc) {
 	printf("Usage: tracelinks [OPTION] PATH [PATH]...\n");
 	printf("Report on symbolic links encountered in path traversals.\n\n");
 	printf("  -a, --absolute    report paths as absolute paths\n");
@@ -32,8 +32,7 @@ usage(const int rc)
 }
 
 static void
-error(const char *format, ...)
-{
+error(const char *format, ...) {
 	va_list argp;
 	va_start(argp, format);
 	vwarnx(format, argp);
@@ -45,8 +44,7 @@ error(const char *format, ...)
  * Loop check: verify that we haven't seen this (root,path) tuple before.
  */
 static int
-loopcheck (const char *root, const char *path)
-{
+loopcheck(const char *root, const char *path) {
 	if (debug_flag)
 		fprintf(stderr, "loopcheck('%s', '%s')\n", root, path);
 
@@ -58,11 +56,11 @@ loopcheck (const char *root, const char *path)
 		return(EXIT_SUCCESS);
 	}
 
-	for (int i=0; i<seenCount; i++)
+	for (int i=0; i < seenCount; i++)
 		if ((strcmp(root, seenTuples[i].root) == 0) &&
 		    (strcmp(path, seenTuples[i].path) == 0)) {
 			fprintf(stderr, "ERROR: loop detected in path: ");
-			for (int j=i; j<seenCount; j++)
+			for (int j=i; j < seenCount; j++)
 				fprintf(stderr, "%s%s -> ", seenTuples[j].root, seenTuples[j].path);
 			fprintf(stderr, "%s%s\n", root, path);
 			return(EXIT_FAILURE);
@@ -75,8 +73,7 @@ loopcheck (const char *root, const char *path)
 #define print_indent(x) printf("%*s", x*2, "")
 
 static int
-tracelinks (int indent, const char *root, const char *path)
-{
+tracelinks(int indent, const char *root, const char *path) {
 	struct stat sb;
 	char pathbuf[PATH_MAX];
 	char *pathend = pathbuf;
@@ -94,8 +91,7 @@ tracelinks (int indent, const char *root, const char *path)
 		if (*path == '/') {
 			/* absolute path */
 			return(tracelinks(indent, "/", (path+1)));
-		}
-		else {
+		} else {
 			/* relative path */
 			if (absolute_flag) {
 				/* Report paths as absolute */
@@ -105,10 +101,10 @@ tracelinks (int indent, const char *root, const char *path)
 				}
 				strcat(pathbuf, "/");
 				return(tracelinks(indent, pathbuf, path));
-			}
-			else
+			} else {
 				/* Report paths relative to "." */
 				return(tracelinks(indent, "./", path));
+			}
 		}
 	}
 
@@ -128,7 +124,6 @@ tracelinks (int indent, const char *root, const char *path)
 
 	if (S_ISLNK(sb.st_mode)) {
 		char linkbuf[PATH_MAX];
-		char *linkbufend = linkbuf;
 		memset(linkbuf, 0, PATH_MAX);
 
 		ssize_t nbytes = readlink(pathbuf, linkbuf, PATH_MAX);
@@ -142,7 +137,7 @@ tracelinks (int indent, const char *root, const char *path)
 
 		if (d) {
 			*d = '/';
-			linkbufend = stpcpy(linkbufend, d);
+			stpcpy(linkbuf+nbytes, d);
 		}
 		if (*linkbuf == '/')
 			/* Absolute link, reset root to "" and replace path */
@@ -150,8 +145,7 @@ tracelinks (int indent, const char *root, const char *path)
 		else
 			/* Relative link, replace path only */
 			return(tracelinks(indent, root, linkbuf));
-	}
-	else {
+	} else {
 		/*
 		 * Recurse if this is a directory and there are further
 		 * directories remaining, otherwise just report it as
@@ -180,8 +174,7 @@ tracelinks (int indent, const char *root, const char *path)
 }
 
 int
-main (int argc, char **argv)
-{
+main(int argc, char **argv) {
 	int c;
 	int maxrc = 0;
 
@@ -198,7 +191,7 @@ main (int argc, char **argv)
 		/* getopt_long stores the option index here. */
 		int option_index = 0;
 
-		c = getopt_long (argc, argv, "akvdh", long_options, &option_index);
+		c = getopt_long(argc, argv, "akvdh", long_options, &option_index);
 
 		/* Detect the end of the options. */
 		if (c == -1)

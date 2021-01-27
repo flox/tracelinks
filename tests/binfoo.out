@@ -1,0 +1,3 @@
+./tests/binfoo -> bin/foo
+  ./tests/bin -> bin-version
+    ./tests/bin-version/foo: regular file
