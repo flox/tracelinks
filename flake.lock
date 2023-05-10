@@ -67,6 +67,7 @@
       },
       "original": {
         "owner": "flox",
+        "ref": "latest",
         "repo": "flox",
         "type": "github"
       }

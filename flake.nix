@@ -1,7 +1,7 @@
 {
   description = "Floxpkgs/Project Template";
 
-  inputs.flox.url = "github:flox/flox";
+  inputs.flox.url = "github:flox/flox/latest";
 
   # Declaration of external resources
   # =================================
