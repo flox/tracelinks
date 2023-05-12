@@ -2,3 +2,4 @@ tracelinks
 tracelinks.1
 *.swp
 /.flox
+/result*
