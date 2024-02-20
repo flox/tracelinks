@@ -1,7 +1,7 @@
-{ self, stdenv, help2man, inputs }:
+{ self, stdenv, help2man }:
 stdenv.mkDerivation {
   pname = "tracelinks";
-  version = "1.0.0-${inputs.flox-floxpkgs.lib.getRev self}";
+  version = "1.0.0";
   src = self;
 
   # Prevent the source from becoming a runtime dependency.

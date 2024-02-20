@@ -1,7 +1,16 @@
 {
-  description = "Floxpkgs/Project Template";
+  description = "List symbolic links encountered in path traversal.";
 
-  inputs.flox-floxpkgs.url = "github:flox/floxpkgs";
+  inputs = {
+    nixpkgs.url = "github:flox/nixpkgs";
+    utils.url = "github:numtide/flake-utils";
+  };
 
-  outputs = args @ {flox-floxpkgs, ...}: flox-floxpkgs.project args (_: {});
+  outputs = { self, nixpkgs, ... }@inputs: inputs.utils.lib.eachSystem [
+    "aarch64-darwin" "aarch64-linux" "x86_64-darwin" "x86_64-linux"
+  ] (system: let
+    pkgs = import nixpkgs { inherit system; };
+  in {
+    packages.default = pkgs.callPackage ./pkgs/tracelinks/default.nix { inherit self; };
+  });
 }
