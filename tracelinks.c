@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <limits.h>
 
+static int minimal_flag = 0;
 static int debug_flag = 0;
 static int absolute_flag = 0;
 static int keep_going_flag = 0;
@@ -26,6 +27,7 @@ usage(const int rc) {
 	printf("  -a, --absolute    report paths as absolute paths\n");
 	printf("  -k, --keep-going  keep reporting on other paths after an error\n");
 	printf("  -h, --help        print this help message\n");
+	printf("  -m, --minimal     print minimal information\n");
 	printf("  -d, --debug       print extra debugging to STDERR\n");
 	printf("  -v, --version     print version string\n");
 	exit(rc);
@@ -133,7 +135,10 @@ tracelinks(int indent, const char *root, const char *path) {
 		}
 
 		print_indent(indent++);
-		printf("%s -> %.*s\n", pathbuf, (int) nbytes, linkbuf);
+		if (minimal_flag)
+			printf("%s ->\n", pathbuf);
+		else
+			printf("%s -> %.*s\n", pathbuf, (int) nbytes, linkbuf);
 
 		if (d) {
 			*d = '/';
@@ -156,14 +161,18 @@ tracelinks(int indent, const char *root, const char *path) {
 			return(tracelinks(indent, pathbuf, d+1));
 		}
 		print_indent(indent++);
-		switch (sb.st_mode & S_IFMT) {
-			case S_IFBLK:  printf("%s: block device\n", pathbuf); break;
-			case S_IFCHR:  printf("%s: character device\n", pathbuf); break;
-			case S_IFDIR:  printf("%s: directory\n", pathbuf); break;
-			case S_IFIFO:  printf("%s: FIFO/pipe\n", pathbuf); break;
-			case S_IFREG:  printf("%s: regular file\n", pathbuf); break;
-			case S_IFSOCK: printf("%s: socket\n", pathbuf); break;
-			default: printf("%s: unknown?\n", pathbuf);
+		if (minimal_flag)
+			printf("%s\n", pathbuf);
+		else {
+			switch (sb.st_mode & S_IFMT) {
+				case S_IFBLK:  printf("%s: block device\n", pathbuf); break;
+				case S_IFCHR:  printf("%s: character device\n", pathbuf); break;
+				case S_IFDIR:  printf("%s: directory\n", pathbuf); break;
+				case S_IFIFO:  printf("%s: FIFO/pipe\n", pathbuf); break;
+				case S_IFREG:  printf("%s: regular file\n", pathbuf); break;
+				case S_IFSOCK: printf("%s: socket\n", pathbuf); break;
+				default: printf("%s: unknown?\n", pathbuf);
+			}
 		}
 		if (d) {
 			warnx("extra trailing characters: %s", d+1);
@@ -183,6 +192,7 @@ main(int argc, char **argv) {
 			{"absolute",	no_argument, 0, 'a'},
 			{"keep-going",	no_argument, 0, 'k'},
 			{"version",	no_argument, 0, 'v'},
+			{"minimal",	no_argument, 0, 'm'},
 			{"debug",	no_argument, 0, 'd'},
 			{"help",	no_argument, 0, 'h'},
 			{0, 0, 0, 0}
@@ -191,7 +201,7 @@ main(int argc, char **argv) {
 		/* getopt_long stores the option index here. */
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "akvdh", long_options, &option_index);
+		c = getopt_long(argc, argv, "akvmdh", long_options, &option_index);
 
 		/* Detect the end of the options. */
 		if (c == -1)
@@ -209,6 +219,10 @@ main(int argc, char **argv) {
 			case 'v':
 				puts(VERSION);
 				exit(EXIT_SUCCESS);
+
+			case 'm':
+				minimal_flag = 1;
+				break;
 
 			case 'd':
 				debug_flag = 1;

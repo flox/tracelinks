@@ -1,7 +1,7 @@
 .DEFAULT_GOAL = all
 
 NAME = tracelinks
-VERSION = 1.0.0
+VERSION = 1.1.0
 PREFIX ?= /usr/local
 CFLAGS = -Wall -g -DVERSION='"$(VERSION)"'
 
