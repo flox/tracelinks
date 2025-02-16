@@ -1,7 +1,7 @@
 .DEFAULT_GOAL = all
 
 NAME = tracelinks
-VERSION = 1.0.0
+VERSION ?= unknown
 PREFIX ?= /usr/local
 CFLAGS = -Wall -g -DVERSION='"$(VERSION)"'
 
@@ -34,10 +34,16 @@ $(MAN1DIR)/%: %
 	cp $< $@
 	chmod 444 $@
 
-.PHONY: all install clean
+.PHONY: all install lint format clean
 all: $(BIN) $(MAN1)
 
 install: $(INSTBIN) $(INSTMAN1)
+
+lint: $(BIN).c
+	clang-tidy $< -- $(CFLAGS)
+
+format: $(BIN).c
+	clang-format -i $<
 
 clean:
 	-rm -f $(BIN) $(MAN1)
