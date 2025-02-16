@@ -1,0 +1,25 @@
+version = 1
+
+[install]
+clang-tools.pkg-path = "clang-tools"
+gcc.pkg-path = "gcc"
+gdb.pkg-path = "gdb"
+gnumake.pkg-path = "gnumake"
+help2man.pkg-path = "help2man"
+
+[options]
+systems = [
+  "aarch64-darwin",
+  "aarch64-linux",
+  "x86_64-darwin",
+  "x86_64-linux",
+]
+
+[build]
+tracelinks.sandbox = "pure"
+tracelinks.runtime-packages = []
+tracelinks.command = '''
+  make
+  make test
+  make install PREFIX=$out
+'''
