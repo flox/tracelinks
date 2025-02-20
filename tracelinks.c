@@ -14,13 +14,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mount.h>
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
+#ifdef __linux__
+#include <mntent.h>
+#include <sys/statfs.h>
+#endif
+
 static int debug_flag = 0;
 static int absolute_flag = 0;
+static int print_fstype_flag = 0;
 static int keep_going_flag = 0;
 
 /* Maximum expected number of recursive calls (not symlinks). */
@@ -36,6 +43,7 @@ static void usage(const int rc) {
   printf("Report on symbolic links encountered in path traversals.\n\n");
   printf("  -a, --absolute    report paths as absolute paths\n");
   printf("  -k, --keep-going  keep reporting on other paths after an error\n");
+  printf("  -f, --fstype      print filesystem type for each path reported\n");
   printf("  -h, --help        print this help message\n");
   printf("  -d, --debug       print extra debugging to STDERR\n");
   printf("  -v, --version     print version string\n");
@@ -81,6 +89,38 @@ static int loopcheck(const char *root, const char *path) {
   return (EXIT_SUCCESS);
 }
 
+void print_filesystem_type(const char *path) {
+#ifdef __linux__
+  struct statfs fsinfo;
+  if (statfs(path, &fsinfo) == 0) {
+    FILE *mntFile = setmntent("/proc/mounts", "r");
+    if (mntFile) {
+      struct mntent *mnt;
+      while ((mnt = getmntent(mntFile)) != NULL) {
+        if (strcmp(mnt->mnt_dir, path) == 0 ||
+            strstr(path, mnt->mnt_dir) == path) {
+          printf(" (%s)", mnt->mnt_type);
+          endmntent(mntFile);
+          return;
+        }
+      }
+      endmntent(mntFile);
+    }
+  }
+  printf(" (unknown)");
+#elif __APPLE__
+  struct statfs fsinfo;
+  if (statfs(path, &fsinfo) == 0) {
+    printf(" (%s)", fsinfo.f_fstypename);
+  } else {
+    perror("statfs");
+    printf(" (unknown)");
+  }
+#else
+  printf(" (unknown)");
+#endif
+}
+
 #define print_indent(x) printf("%*s", x * 2, "")
 
 static int tracelinks(int indent, const char *root, const char *path) {
@@ -108,7 +148,8 @@ static int tracelinks(int indent, const char *root, const char *path) {
           perror("getcwd()");
           return (EXIT_FAILURE);
         }
-        strncat(pathbuf, "/", 1);
+        // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=83404
+        strncat(pathbuf, "/", sizeof(pathbuf) - strlen(pathbuf) - 1);
         return (tracelinks(indent, pathbuf, path));
       } else {
         /* Report paths relative to "." */
@@ -142,7 +183,11 @@ static int tracelinks(int indent, const char *root, const char *path) {
     }
 
     print_indent(indent++);
-    printf("%s -> %.*s\n", pathbuf, (int)nbytes, linkbuf);
+    printf("%s -> %.*s", pathbuf, (int)nbytes, linkbuf);
+
+    if (print_fstype_flag)
+      print_filesystem_type(pathbuf);
+    printf("\n");
 
     if (d) {
       *d = '/';
@@ -167,26 +212,29 @@ static int tracelinks(int indent, const char *root, const char *path) {
     print_indent(indent++);
     switch (sb.st_mode & S_IFMT) {
     case S_IFBLK:
-      printf("%s: block device\n", pathbuf);
+      printf("%s: block device", pathbuf);
       break;
     case S_IFCHR:
-      printf("%s: character device\n", pathbuf);
+      printf("%s: character device", pathbuf);
       break;
     case S_IFDIR:
-      printf("%s: directory\n", pathbuf);
+      printf("%s: directory", pathbuf);
       break;
     case S_IFIFO:
-      printf("%s: FIFO/pipe\n", pathbuf);
+      printf("%s: FIFO/pipe", pathbuf);
       break;
     case S_IFREG:
-      printf("%s: regular file\n", pathbuf);
+      printf("%s: regular file", pathbuf);
       break;
     case S_IFSOCK:
-      printf("%s: socket\n", pathbuf);
+      printf("%s: socket", pathbuf);
       break;
     default:
-      printf("%s: unknown?\n", pathbuf);
+      printf("%s: unknown?", pathbuf);
     }
+    if (print_fstype_flag)
+      print_filesystem_type(pathbuf);
+    printf("\n");
     if (d) {
       warnx("extra trailing characters: %s", d + 1);
       return (EXIT_FAILURE);
@@ -200,15 +248,18 @@ int main(int argc, char **argv) {
   int maxrc = 0;
 
   while (1) {
-    static struct option long_options[] = {
-        {"absolute", no_argument, 0, 'a'}, {"keep-going", no_argument, 0, 'k'},
-        {"version", no_argument, 0, 'v'},  {"debug", no_argument, 0, 'd'},
-        {"help", no_argument, 0, 'h'},     {0, 0, 0, 0}};
+    static struct option long_options[] = {{"absolute", no_argument, 0, 'a'},
+                                           {"fstype", no_argument, 0, 'f'},
+                                           {"keep-going", no_argument, 0, 'k'},
+                                           {"version", no_argument, 0, 'v'},
+                                           {"debug", no_argument, 0, 'd'},
+                                           {"help", no_argument, 0, 'h'},
+                                           {0, 0, 0, 0}};
 
     /* getopt_long stores the option index here. */
     int option_index = 0;
 
-    c = getopt_long(argc, argv, "akvdh", long_options, &option_index);
+    c = getopt_long(argc, argv, "afkvdh", long_options, &option_index);
 
     /* Detect the end of the options. */
     if (c == -1)
@@ -217,6 +268,10 @@ int main(int argc, char **argv) {
     switch (c) {
     case 'a':
       absolute_flag = 1;
+      break;
+
+    case 'f':
+      print_fstype_flag = 1;
       break;
 
     case 'k':
