@@ -1,0 +1,12 @@
+# clang-tidy configuration for tracelinks.
+#
+# Run the compiler diagnostics and the clang static analyzer, but disable the
+# Annex K "use the *_s bounds-checked functions" check. Those variants
+# (fprintf_s, strcpy_s, ...) are an optional C11 extension that neither glibc
+# nor the macOS C library implements, so the warnings are not actionable and
+# only drown out real findings.
+Checks: >
+  clang-diagnostic-*,
+  clang-analyzer-*,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
+WarningsAsErrors: ''

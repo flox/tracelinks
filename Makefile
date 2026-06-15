@@ -1,7 +1,9 @@
 .DEFAULT_GOAL = all
 
 NAME = tracelinks
-VERSION ?= unknown
+# Derive the version from git when available, falling back to "unknown" for
+# builds from an archive or an environment without git.
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo unknown)
 PREFIX ?= /usr/local
 CFLAGS = -Wall -g -DVERSION='"$(VERSION)"'
 
@@ -50,7 +52,9 @@ clean:
 
 TESTS_DIR = tests
 TESTS = $(basename $(wildcard $(TESTS_DIR)/*.rc))
-TESTTMPDIR := $(shell mktemp -d)
+# Only reserve a name here (-u); the test targets mkdir -p it on demand, so we
+# avoid creating a stray directory on every make invocation.
+TESTTMPDIR := $(shell mktemp -u -d)
 define TEST_template =
   .PHONY: $(test)/run
   $(test)/run: $$(BIN)
@@ -109,6 +113,14 @@ define TEST_template =
 endef
 
 $(foreach test,$(TESTS),$(eval $(call TEST_template)))
+
+# Functional tests for command-line behavior (flags, multiple paths, errors)
+# that the golden-output fixtures above cannot express.
+.PHONY: cli-test
+cli-test: $(BIN)
+	sh tests/cli-test ./$(BIN)
+
+test: cli-test
 
 # Once tests are complete (and successful), remove test results.
 test:
