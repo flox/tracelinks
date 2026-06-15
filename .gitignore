@@ -2,3 +2,7 @@ tracelinks
 tracelinks.1
 *.swp
 /result*
+
+# Build artifacts
+check_fs
+*.dSYM/

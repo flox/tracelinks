@@ -1,0 +1,135 @@
+#!/bin/sh
+#
+# Functional tests for tracelinks command-line behavior that the golden-output
+# suite driven by the Makefile cannot express: option flags, multiple paths,
+# and error handling.
+#
+# Usage: tests/cli-test [path-to-tracelinks-binary]   (default: ./tracelinks)
+#
+# Exits 0 if every check passes, nonzero otherwise.
+
+set -u
+
+bin=${1:-./tracelinks}
+case $bin in
+/*) ;;                  # already absolute
+*) bin=$(pwd)/$bin ;;   # make absolute so it survives the cd below
+esac
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT INT TERM
+cd "$work" || exit 99
+
+# A small fixture tree: a real file, a couple of symlinks to it, and a
+# dangling link.
+echo content >realfile
+ln -s realfile good
+ln -s good good2
+ln -s does-not-exist bad
+
+fails=0
+pass() { printf 'ok   - %s\n' "$1"; }
+failure() {
+  printf 'FAIL - %s\n' "$1"
+  fails=$((fails + 1))
+}
+
+# run COMMAND...  -> sets $out, $err and $status from the binary's output.
+run() {
+  out=$("$bin" "$@" 2>"$work/stderr")
+  status=$?
+  err=$(cat "$work/stderr")
+}
+
+# --version / -v print a non-empty version string and exit 0.
+run --version
+if [ "$status" -eq 0 ] && [ -n "$out" ]; then
+  pass "--version exits 0 and prints a version"
+else
+  failure "--version exits 0 and prints a version"
+fi
+run -v
+if [ "$status" -eq 0 ] && [ -n "$out" ]; then
+  pass "-v exits 0 and prints a version"
+else
+  failure "-v exits 0 and prints a version"
+fi
+
+# --help / -h print usage to stdout and exit 0.
+run --help
+if [ "$status" -eq 0 ] && printf '%s\n' "$out" | grep -q '^Usage:'; then
+  pass "--help prints usage to stdout"
+else
+  failure "--help prints usage to stdout"
+fi
+run -h
+if [ "$status" -eq 0 ] && printf '%s\n' "$out" | grep -q '^Usage:'; then
+  pass "-h prints usage to stdout"
+else
+  failure "-h prints usage to stdout"
+fi
+
+# No paths is a usage error reported on stderr.
+run
+if [ "$status" -ne 0 ] && printf '%s\n' "$err" | grep -q 'no paths'; then
+  pass "no arguments errors on stderr"
+else
+  failure "no arguments errors on stderr"
+fi
+
+# An unknown option is an error with a "try --help" hint on stderr.
+run -Z
+if [ "$status" -ne 0 ] && printf '%s\n' "$err" | grep -q 'Try'; then
+  pass "unknown option errors with a hint"
+else
+  failure "unknown option errors with a hint"
+fi
+
+# Multiple paths are all reported in a single invocation.
+run good good2
+if [ "$status" -eq 0 ] &&
+  printf '%s\n' "$out" | grep -q 'good ->' &&
+  printf '%s\n' "$out" | grep -q 'good2 ->'; then
+  pass "multiple paths are all reported"
+else
+  failure "multiple paths are all reported"
+fi
+
+# --keep-going continues to later paths after an error (and still exits nonzero).
+run --keep-going bad good
+if [ "$status" -ne 0 ] && printf '%s\n' "$out" | grep -q 'good ->'; then
+  pass "--keep-going reports paths after an error"
+else
+  failure "--keep-going reports paths after an error"
+fi
+
+# Without --keep-going, processing stops at the first error.
+run bad good
+if [ "$status" -ne 0 ] && ! printf '%s\n' "$out" | grep -q 'good ->'; then
+  pass "stops at the first error without --keep-going"
+else
+  failure "stops at the first error without --keep-going"
+fi
+
+# --absolute reports resolved paths as absolute paths.
+run --absolute good
+if [ "$status" -eq 0 ] && printf '%s\n' "$out" | grep -q '^/'; then
+  pass "--absolute reports absolute paths"
+else
+  failure "--absolute reports absolute paths"
+fi
+
+# --fstype annotates each reported path with a parenthesised filesystem type.
+run --fstype good
+if [ "$status" -eq 0 ] && printf '%s\n' "$out" | grep -q '([^)]*)'; then
+  pass "--fstype annotates a filesystem type"
+else
+  failure "--fstype annotates a filesystem type"
+fi
+
+if [ "$fails" -eq 0 ]; then
+  printf '\nAll CLI tests passed.\n'
+  exit 0
+fi
+printf '\n%d CLI test(s) failed.\n' "$fails"
+exit 1
