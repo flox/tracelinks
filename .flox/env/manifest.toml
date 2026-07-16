@@ -25,6 +25,8 @@ on-activate = '''
 [build]
 tracelinks.sandbox = "pure"
 tracelinks.runtime-packages = []
+tracelinks.version.command = "git describe --tags --always --dirty"
+tracelinks.description = "Report on symbolic links encountered in path traversals"
 tracelinks.command = '''
   make
   make test
