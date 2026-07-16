@@ -34,7 +34,11 @@
       "tracelinks": {
         "command": "  make\n  make test\n  make install PREFIX=$out\n",
         "runtime-packages": [],
-        "sandbox": "pure"
+        "sandbox": "pure",
+        "version": {
+          "command": "git describe --tags --always --dirty"
+        },
+        "description": "Report on symbolic links encountered in path traversals"
       }
     }
   },
